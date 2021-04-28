@@ -9,12 +9,12 @@ offset = nVars * nHidden(1);
 hiddenWeights = cell(1, nHiddenLayers-1);
 for h = 2:nHiddenLayers
     hiddenWeights{h-1} = reshape(...
-        w(offset+1:offset+nHidden(h-1)*nHidden(h)),...
-        nHidden(h-1), nHidden(h));
-    offset = offset + nHidden(h-1) * nHidden(h);
+        w(offset+1:offset+(nHidden(h-1)+1)*nHidden(h)),...
+        nHidden(h-1)+1, nHidden(h));
+    offset = offset + (nHidden(h-1) + 1) * nHidden(h);
 end
-outputWeights = w(offset+1:offset+nHidden(end)*nLabels);
-outputWeights = reshape(outputWeights, nHidden(end), nLabels);
+outputWeights = w(offset+1:offset+(nHidden(end)+1)*nLabels);
+outputWeights = reshape(outputWeights, nHidden(end)+1, nLabels);
 
 ip = cell(1, nHiddenLayers);
 fp = cell(1, nHiddenLayers);
@@ -31,10 +31,10 @@ if nargout > 1
     
     % Compute Output
     for i = 1:nInstances
-        ip{1} = X(i,:) * inputWeights;
+        ip{1} = [1, X(i,:)*inputWeights];
         fp{1} = tanh(ip{1});
         for h = 2:length(nHidden)
-            ip{h} = fp{h-1} * hiddenWeights{h-1};
+            ip{h} = [1, fp{h-1}*hiddenWeights{h-1}];
             fp{h} = tanh(ip{h});
         end
         yhat = fp{end} * outputWeights;
@@ -45,36 +45,30 @@ if nargout > 1
         err = 2 * relativeErr;
         
         % Output Weights
-        gOutput = gOutput + fp{end}' * err + lambda * outputWeights;
+        gOutput = gOutput + fp{end}' * err;
         
+        % to be modified
         if nHiddenLayers > 1
             % Last Layer of Hidden Weights
             backprop = err' * sech(ip{end}).^2 .* outputWeights';
-            gHidden{end} = gHidden{end} + fp{end-1}' * sum(backprop,1) ...
-                +  lambda * hiddenWeights{end};
+            gHidden{end} = gHidden{end} + fp{end-1}' * sum(backprop,1);
             
             backprop = sum(backprop,1);
             % Other Hidden Layers
             for h = length(nHidden)-2:-1:1
                 backprop = (backprop * hiddenWeights{h+1}') .* ...
                     sech(ip{h+1}).^2;
-                gHidden{h} = gHidden{h} + fp{h}' * sum(backprop,1) + ...
-                    lambda * hiddenWeights{h};
+                gHidden{h} = gHidden{h} + fp{h}' * backprop;
             end
             
             % Input Weights
             backprop = (backprop * hiddenWeights{1}') .* sech(ip{1}).^2;
-            gInput = gInput + X(i,:)' * backprop + lambda * inputWeights;
-            % The bias need not be included in regularization.
-            gInput(1,:) = gInput(1,:) - lambda * inputWeights(1,:);
+            gInput = gInput + X(i,:)' * backprop;
             
         else % nHiddenLayers == 1
             % Input Weights
-            gInput = gInput + X(i,:)' * ...
-                ( sech(ip{end}).^2 .* (outputWeights * err')' ) + ...
-                lambda * inputWeights;
-            % The bias need not be included in regularization.
-            gInput(1,:) = gInput(1,:) - lambda * inputWeights(1,:);
+            temp = sech(ip{end}).^2 .* (outputWeights * err')';
+            gInput = gInput + X(i,:)' * temp(2:end);
         end
     end
     
@@ -83,21 +77,23 @@ if nargout > 1
     g(1:nVars*nHidden(1)) = gInput(:);
     offset = nVars*nHidden(1);
     for h = 2:nHiddenLayers
-        g(offset+1:offset+nHidden(h-1)*nHidden(h)) = gHidden{h-1};
-        offset = offset+nHidden(h-1)*nHidden(h);
+        g(offset+1:offset+(nHidden(h-1)+1)*nHidden(h)) = gHidden{h-1};
+        offset = offset+(nHidden(h-1)+1)*nHidden(h);
     end
-    g(offset+1:offset+nHidden(end)*nLabels) = gOutput(:);
+    g(offset+1:offset+(nHidden(end)+1)*nLabels) = gOutput(:);
     
     
 else % nargout <= 1
-    ip{1} = X * inputWeights;
+    ip{1} = [ones(ninstances,1), X*inputWeights];
     fp{1} = tanh(ip{1});
     for h = 2:nHiddenLayers
-        ip{h} = fp{h-1} * hiddenWeights{h-1};
+        ip{h} = [ones(ninstances,1), fp{h-1}*hiddenWeights{h-1}];
         fp{h} = tanh(ip{h});
     end
     yhat = fp{end} * outputWeights;
     
     relativeErr = yhat - y;
     f = sum(sum(relativeErr.^2));
+end
+
 end
