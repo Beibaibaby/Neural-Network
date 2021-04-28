@@ -1,6 +1,5 @@
 function [y] = MLPclassificationPredict(w,X,nHidden,nLabels)
 [nInstances,nVars] = size(X);
-
 % Form Weights
 inputWeights = reshape(w(1:nVars*nHidden(1)),nVars,nHidden(1));
 offset = nVars*nHidden(1);
