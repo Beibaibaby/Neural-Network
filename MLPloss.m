@@ -1,8 +1,7 @@
-function [f,g] = MLPclassificationLoss_mat(w,X,y,nHidden,nLabels)
-% MLPCLASSIFICATIONLOSS_MAT does the same thing as MLPclassificationLoss,
-% but computes as much by matrix as possible, which is very fast.
+function [f,g] = MLP_dropout(w,X,y,nHidden,nLabels,p)
+% MLP_DROPOUT dropped hidden units out with probability p during training.
 %
-% Yuanbo Han, Dec. 5, 2017.
+% Yuanbo Han, Dec. 8, 2017.
 
 [nInstances, nVars] = size(X);
 nHiddenLayers = length(nHidden);
@@ -31,14 +30,17 @@ if nargout > 1
     end
     gOutput = zeros(size(outputWeights));
     
-    f = 0;
+    dropout = cell(1, nHiddenLayers);
     
+    f = 0;
     % Compute Output
     for i = 1:nInstances
-        ip{1} = X(i,:) * inputWeights;
+        dropout{1} = (rand(1, nHidden(1)) > p);
+        ip{1} = (X(i,:) * inputWeights) .* dropout{1};
         fp{1} = tanh(ip{1});
         for h = 2:length(nHidden)
-            ip{h} = fp{h-1} * hiddenWeights{h-1};
+            dropout{h} = (rand(1, nHidden(h)) > p);
+            ip{h} = fp{h-1} * hiddenWeights{h-1} .* dropout{h};
             fp{h} = tanh(ip{h});
         end
         yhat = fp{end} * outputWeights;
@@ -53,25 +55,28 @@ if nargout > 1
         
         if nHiddenLayers > 1
             % Last Layer of Hidden Weights
-            backprop = (err' * sech(ip{end}).^2) .* outputWeights';
+            backprop = ( err' * (sech(ip{end}).^2 .* dropout{end}) ) .* ...
+                outputWeights';
             backprop = sum(backprop,1);
             gHidden{end} = gHidden{end} + fp{end-1}' * backprop;
             
             % Other Hidden Layers
-            for h = nHiddenLayers-2:-1:1
+            for h = length(nHidden)-2:-1:1
                 backprop = (backprop * hiddenWeights{h+1}') .* ...
-                    sech(ip{h+1}).^2;
+                    sech(ip{h+1}).^2 .* dropout{h+1};
                 gHidden{h} = gHidden{h} + fp{h}' * backprop;
             end
             
             % Input Weights
-            backprop = (backprop * hiddenWeights{1}') .* sech(ip{1}).^2;
+            backprop = (backprop * hiddenWeights{1}') .* ...
+                sech(ip{1}).^2 .* dropout{1};
             gInput = gInput + X(i,:)' * backprop;
             
         else % nHiddenLayers == 1
             % Input Weights
             gInput = gInput + X(i,:)' * ...
-                ( sech(ip{end}).^2 .* (outputWeights * err')' );
+                ( sech(ip{end}).^2 .* dropout{end} .* ...
+                (outputWeights * err')' );
         end
     end
     
